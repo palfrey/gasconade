@@ -11,15 +11,117 @@ extern crate logger;
 extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate persistent;
+extern crate mustache;
+#[macro_use]
+extern crate mime;
+#[macro_use]
+extern crate lazy_static;
+extern crate regex;
+extern crate params;
+extern crate reqwest;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_yaml;
+extern crate base64;
 
 use iron::prelude::*;
+use iron::status;
 use router::Router;
 use logger::Logger;
 use std::env;
 use persistent::Read as PRead;
+use mustache::MapBuilder;
+use params::{Params, Value};
+use std::io::Read;
+use std::fs::File;
+use reqwest::header::{Authorization, Bearer};
 
+#[macro_use]
 mod db;
 mod schema;
+
+#[derive(Debug, Serialize, Deserialize)]
+struct TwitterConfig {
+    key: String,
+    secret: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Config {
+    twitter: TwitterConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct BearerToken {
+    token_type: String,
+    access_token: String,
+}
+
+lazy_static! {
+    static ref CONFIG: Config = {
+        let f = File::open("config.yaml").unwrap();
+        serde_yaml::from_reader(f).unwrap()
+    };
+    static ref TOKEN: String = {
+        let client = reqwest::Client::new().unwrap();
+        let mut res = client.post("https://api.twitter.com/oauth2/token").unwrap()
+            .basic_auth(CONFIG.twitter.key.clone(), Some(CONFIG.twitter.secret.clone()))
+            .header(reqwest::header::ContentType::form_url_encoded())
+            .body("grant_type=client_credentials")
+            .send().unwrap();
+        let content: BearerToken = res.json().unwrap();
+        res.error_for_status().unwrap();
+        content.access_token
+    };
+}
+
+pub fn render_to_response(path: &str, data: &mustache::Data) -> Vec<u8> {
+    let template = mustache::compile_path(path).expect(&format!("working template for {}", path));
+    let mut buffer: Vec<u8> = vec![];
+    template.render_data(&mut buffer, data).unwrap();
+    return buffer;
+}
+
+pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
+    let map = req.get_ref::<Params>().unwrap();
+    let find_url = map.find(&["twitter_url"]);
+    if find_url.is_none() {
+        return Ok(Response::with(status::NotFound));
+    }
+    let url_value = find_url.unwrap();
+    let re = regex::Regex::new(r"https://twitter.com/[^/]+/status/(\d+)").unwrap();
+    if let &Value::String(ref url) = url_value {
+        let raw_caps = re.captures(url);
+        if raw_caps.is_none() {
+            return Ok(Response::with(status::BadRequest));
+        }
+        let id = raw_caps.unwrap()
+            .get(1)
+            .unwrap()
+            .as_str();
+        let client = reqwest::Client::new().unwrap();
+        let mut res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}",
+                                          id))
+            .unwrap()
+            .header(Authorization(Bearer { token: TOKEN.clone() }))
+            .send()
+            .unwrap();
+        let mut content = String::new();
+        res.read_to_string(&mut content);
+        println!("{}", content);
+        return Ok(Response::with((status::Ok, id)));
+    } else {
+        unimplemented!();
+    }
+}
+
+pub fn index(_: &mut Request) -> IronResult<Response> {
+    let data = MapBuilder::new().build();
+    Ok(Response::with((mime!(Text / Html),
+                       status::Ok,
+                       render_to_response("resources/templates/index.mustache", &data))))
+}
 
 fn main() {
     log4rs::init_file("log.yaml", Default::default()).unwrap();
@@ -29,10 +131,13 @@ fn main() {
     schema::up(&conn).unwrap();
     let (logger_before, logger_after) = Logger::new(None);
     let mut router = Router::new();
+    router.get("/", index, "index");
+    router.post("/tweet", tweet, "tweet");
     let mut chain = Chain::new(router);
     chain.link_before(logger_before);
     chain.link_after(logger_after);
     chain.link(PRead::<db::PostgresDB>::both(pool));
     info!("Gasconade booted");
+    info!("Token is {:?}", *TOKEN);
     Iron::new(chain).http("0.0.0.0:8000").unwrap();
 }

@@ -29,7 +29,8 @@ fn migrate(connection: &postgres::Connection) -> Migrator<PostgresAdapter> {
     return migrator;
 }
 
-pub fn up(connection: &postgres::Connection) -> Result<(), schemamama::Error<postgres::error::Error>> {
+pub fn up(connection: &postgres::Connection)
+          -> Result<(), schemamama::Error<postgres::error::Error>> {
     let migrator = migrate(connection);
     return migrator.up(None);
 }
