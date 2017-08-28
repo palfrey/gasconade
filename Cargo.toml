@@ -1,0 +1,19 @@
+[package]
+name = "gasconade"
+version = "0.1.0"
+authors = ["Tom Parker <palfrey@tevp.net>"]
+
+[dependencies]
+schemamama = "*"
+schemamama_postgres = "*"
+url = "*"
+postgres = {features=["with-uuid","with-serde_json"], version="^0.13"}
+iron = "*"
+plugin = "*"
+router = "*"
+logger = "*"
+log = "*"
+log4rs = {version = ">= 0.4", features=["yaml_format"]}
+r2d2 = "*"
+r2d2_postgres = "^0.11"
+persistent = "*"
