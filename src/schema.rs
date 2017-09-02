@@ -9,15 +9,29 @@ migration!(Tweet, 201709021820, "add basic tweet listing");
 
 impl PostgresMigration for Tweet {
     fn up(&self, transaction: &Transaction) -> Result<(), postgres::error::Error> {
-        transaction.execute("CREATE TABLE tweet (id bigint PRIMARY KEY, text VARCHAR(300) NOT NULL, in_reply_to_status_id bigint NULL, in_reply_to_user_id bigint NULL);", &[])
+        transaction.execute("
+        CREATE TABLE tweet (
+            id bigint PRIMARY KEY,
+            text VARCHAR(300) NOT NULL,
+            in_reply_to_status_id bigint NULL,
+            in_reply_to_user_id bigint NULL
+            );",
+                            &[])
             .unwrap();
-        transaction.execute("CREATE TABLE twitter_user (id bigint PRIMARY KEY, name VARCHAR(300) NOT NULL, profile_image_url TEXT);", &[])
+        transaction.execute("
+        CREATE TABLE twitter_user (
+            id bigint PRIMARY KEY,
+            name VARCHAR(300) NOT NULL,
+            profile_image_url TEXT
+            );",
+                            &[])
             .unwrap();
         return Ok(());
     }
 
     fn down(&self, transaction: &Transaction) -> Result<(), postgres::error::Error> {
-        let _ = transaction.execute("DROP TABLE nodes", &[]).unwrap();
+        transaction.execute("DROP TABLE tweet", &[]).unwrap();
+        transaction.execute("DROP TABLE twitter_user", &[]).unwrap();
         return Ok(());
     }
 }

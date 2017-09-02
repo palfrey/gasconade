@@ -33,9 +33,9 @@ use std::env;
 use persistent::Read as PRead;
 use mustache::MapBuilder;
 use params::{Params, Value};
-use std::io::Read;
 use std::fs::File;
 use reqwest::header::{Authorization, Bearer};
+use std::str::FromStr;
 
 #[macro_use]
 mod db;
@@ -83,7 +83,49 @@ pub fn render_to_response(path: &str, data: &mustache::Data) -> Vec<u8> {
     return buffer;
 }
 
+#[derive(Deserialize, Debug)]
+struct TwitterUser {
+    id: i64,
+    name: String,
+    profile_image_url: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct Tweet {
+    id: i64,
+    user: TwitterUser,
+    text: String,
+    in_reply_to_status_id: Option<i64>,
+    in_reply_to_user_id: Option<i64>,
+}
+
+fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Tweet {
+    for row in &conn.query("SELECT text, in_reply_to_status_id, in_reply_to_user_id FROM tweet",
+                           &[])
+                    .unwrap() {
+        return Tweet {
+                   id: id,
+                   user: TwitterUser {
+                       id: -1,
+                       name: String::new(),
+                       profile_image_url: String::new(),
+                   },
+                   text: row.get(0),
+                   in_reply_to_status_id: row.get(1),
+                   in_reply_to_user_id: row.get(2),
+               };
+    }
+    let client = reqwest::Client::new().unwrap();
+    let mut res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
+        .unwrap()
+        .header(Authorization(Bearer { token: TOKEN.clone() }))
+        .send()
+        .unwrap();
+    return res.json().unwrap();
+}
+
 pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
+    let conn = get_pg_connection!(&req);
     let map = req.get_ref::<Params>().unwrap();
     let find_url = map.find(&["twitter_url"]);
     if find_url.is_none() {
@@ -96,21 +138,14 @@ pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
         if raw_caps.is_none() {
             return Ok(Response::with(status::BadRequest));
         }
-        let id = raw_caps.unwrap()
-            .get(1)
-            .unwrap()
-            .as_str();
-        let client = reqwest::Client::new().unwrap();
-        let mut res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}",
-                                          id))
-            .unwrap()
-            .header(Authorization(Bearer { token: TOKEN.clone() }))
-            .send()
-            .unwrap();
-        let mut content = String::new();
-        res.read_to_string(&mut content).unwrap();
-        println!("{}", content);
-        return Ok(Response::with((status::Ok, id)));
+        let id = i64::from_str(raw_caps.unwrap()
+                                   .get(1)
+                                   .unwrap()
+                                   .as_str())
+                .unwrap();
+        let t = get_tweet(&conn, id);
+        println!("{:?}", t);
+        return Ok(Response::with((status::Ok, format!("{}", id))));
     } else {
         unimplemented!();
     }
