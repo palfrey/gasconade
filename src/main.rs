@@ -36,6 +36,7 @@ use params::{Params, Value};
 use std::fs::File;
 use reqwest::header::{Authorization, Bearer};
 use std::str::FromStr;
+use iron::modifiers::RedirectRaw;
 
 #[macro_use]
 mod db;
@@ -159,13 +160,24 @@ pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
             return Ok(Response::with(status::BadRequest));
         }
         let id = i64::from_str(raw_caps.unwrap()
-                                   .get(1)
-                                   .unwrap()
-                                   .as_str())
+                                       .get(1)
+                                       .unwrap()
+                                       .as_str())
                 .unwrap();
-        let t = get_tweet(&conn, id);
-        info!("{:?}", t);
-        return Ok(Response::with((status::Ok, format!("{}", id))));
+        let mut tweets: Vec<Tweet> = Vec::new();
+        let mut current_id = id;
+        loop {
+            let t = get_tweet(&conn, current_id);
+            info!("{:?}", t);
+            let next_id: Option<i64> = t.in_reply_to_status_id;
+            tweets.insert(0, t);
+            if next_id.is_none() {
+                break;
+            }
+            current_id = next_id.unwrap();
+        }
+        info!("{:?}", tweets);
+        return Ok(Response::with(((status::Found, RedirectRaw(format!("/tweet/{}", id))))));
     } else {
         unimplemented!();
     }
