@@ -24,6 +24,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_yaml;
 extern crate base64;
+extern crate rustc_serialize;
 
 use iron::prelude::*;
 use iron::status;
@@ -37,6 +38,7 @@ use std::fs::File;
 use reqwest::header::{Authorization, Bearer};
 use std::str::FromStr;
 use iron::modifiers::RedirectRaw;
+use db::PostgresConnection;
 
 #[macro_use]
 mod db;
@@ -84,31 +86,44 @@ pub fn render_to_response(path: &str, data: &mustache::Data) -> Vec<u8> {
     return buffer;
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, RustcEncodable)]
 struct TwitterUser {
     id: i64,
+    screen_name: String,
     name: String,
     profile_image_url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, RustcEncodable)]
 struct Tweet {
     id: i64,
     user: TwitterUser,
     text: String,
     in_reply_to_status_id: Option<i64>,
     in_reply_to_user_id: Option<i64>,
+
+    // we fill this in from OEmbed, not the original JSON
+    #[serde(skip)]
+    html: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct OEmbed {
+    html: String,
 }
 
 fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Tweet {
     let tweets = &conn.query("
-    SELECT user_id, text, in_reply_to_status_id, in_reply_to_user_id FROM tweet WHERE id = $1",
+    SELECT user_id, text,
+    in_reply_to_status_id,
+    in_reply_to_user_id, html FROM tweet WHERE id = $1",
                              &[&id])
                       .unwrap();
     if !tweets.is_empty() {
         let tweet = tweets.get(0);
         let user_id: i64 = tweet.get(0);
-        let users = &conn.query("SELECT name, profile_image_url FROM twitter_user WHERE id = $1",
+        let users = &conn.query("
+            SELECT name, profile_image_url, username FROM twitter_user WHERE id = $1",
                                 &[&user_id])
                          .unwrap();
         let user = users.get(0);
@@ -118,10 +133,12 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Tweet {
                        id: user_id,
                        name: user.get(0),
                        profile_image_url: user.get(1),
+                       screen_name: user.get(2),
                    },
                    text: tweet.get(1),
                    in_reply_to_status_id: tweet.get(2),
                    in_reply_to_user_id: tweet.get(3),
+                   html: tweet.get(4),
                };
     }
     let client = reqwest::Client::new().unwrap();
@@ -133,19 +150,48 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Tweet {
     let t: Tweet = res.json().unwrap();
     let rows = &conn.query("SELECT 1 FROM twitter_user WHERE id = $1", &[&t.user.id]).unwrap();
     if rows.is_empty() {
-        conn.execute("INSERT INTO twitter_user (id, name, profile_image_url) VALUES ($1,$2,$3)",
-                     &[&t.user.id, &t.user.name, &t.user.profile_image_url])
+        conn.execute("
+        INSERT INTO twitter_user (id, name, profile_image_url, username) VALUES ($1,$2,$3,$4)",
+                     &[&t.user.id, &t.user.name, &t.user.profile_image_url, &t.user.screen_name])
             .unwrap();
     }
+    let mut content = client.get(&format!("https://publish.twitter.com/oembed?
+    url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true",
+                                          &t.user.screen_name,
+                                          &t.id))
+        .unwrap()
+        .send()
+        .unwrap();
+    let oembed: OEmbed = content.json().unwrap();
     conn.execute("INSERT INTO tweet
-            (id, user_id, text, in_reply_to_status_id, in_reply_to_user_id)
-            VALUES ($1,$2,$3,$4,$5)",
-                 &[&t.id, &t.user.id, &t.text, &t.in_reply_to_status_id, &t.in_reply_to_user_id])
+            (id, user_id, text, in_reply_to_status_id, in_reply_to_user_id, html)
+            VALUES ($1,$2,$3,$4,$5,$6)",
+                 &[&t.id,
+                   &t.user.id,
+                   &t.text,
+                   &t.in_reply_to_status_id,
+                   &t.in_reply_to_user_id,
+                   &oembed.html])
         .unwrap();
     t
 }
 
-pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
+fn get_tweets(conn: &PostgresConnection, id: i64) -> Vec<Tweet> {
+    let mut tweets: Vec<Tweet> = Vec::new();
+    let mut current_id = id;
+    loop {
+        let t = get_tweet(&conn, current_id);
+        let next_id: Option<i64> = t.in_reply_to_status_id;
+        tweets.insert(0, t);
+        if next_id.is_none() {
+            break;
+        }
+        current_id = next_id.unwrap();
+    }
+    tweets
+}
+
+pub fn new_tweet(mut req: &mut Request) -> IronResult<Response> {
     let conn = get_pg_connection!(&req);
     let map = req.get_ref::<Params>().unwrap();
     let find_url = map.find(&["twitter_url"]);
@@ -160,27 +206,31 @@ pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
             return Ok(Response::with(status::BadRequest));
         }
         let id = i64::from_str(raw_caps.unwrap()
-                                       .get(1)
-                                       .unwrap()
-                                       .as_str())
+                                   .get(1)
+                                   .unwrap()
+                                   .as_str())
                 .unwrap();
-        let mut tweets: Vec<Tweet> = Vec::new();
-        let mut current_id = id;
-        loop {
-            let t = get_tweet(&conn, current_id);
-            info!("{:?}", t);
-            let next_id: Option<i64> = t.in_reply_to_status_id;
-            tweets.insert(0, t);
-            if next_id.is_none() {
-                break;
-            }
-            current_id = next_id.unwrap();
-        }
+        let tweets = get_tweets(&conn, id);
         info!("{:?}", tweets);
         return Ok(Response::with(((status::Found, RedirectRaw(format!("/tweet/{}", id))))));
     } else {
         unimplemented!();
     }
+}
+
+pub fn tweet(req: &mut Request) -> IronResult<Response> {
+    let conn = get_pg_connection!(&req);
+    let tweet_id: i64 = i64::from_str(req.extensions
+                                          .get::<Router>()
+                                          .unwrap()
+                                          .find("tweet_id")
+                                          .unwrap())
+            .unwrap();
+    let tweets = get_tweets(&conn, tweet_id);
+    let data = MapBuilder::new().insert("tweets", &tweets).expect("inserting tweets works").build();
+    Ok(Response::with((mime!(Text / Html),
+                       status::Ok,
+                       render_to_response("resources/templates/tweet.mustache", &data))))
 }
 
 pub fn index(_: &mut Request) -> IronResult<Response> {
@@ -199,7 +249,8 @@ fn main() {
     let (logger_before, logger_after) = Logger::new(None);
     let mut router = Router::new();
     router.get("/", index, "index");
-    router.post("/tweet", tweet, "tweet");
+    router.post("/tweet", new_tweet, "query tweet");
+    router.get("/tweet/:tweet_id", tweet, "tweet");
     let mut chain = Chain::new(router);
     chain.link_before(logger_before);
     chain.link_after(logger_after);
