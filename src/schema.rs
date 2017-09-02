@@ -10,19 +10,20 @@ migration!(Tweet, 201709021820, "add basic tweet listing");
 impl PostgresMigration for Tweet {
     fn up(&self, transaction: &Transaction) -> Result<(), postgres::error::Error> {
         transaction.execute("
-        CREATE TABLE tweet (
-            id bigint PRIMARY KEY,
-            text VARCHAR(300) NOT NULL,
-            in_reply_to_status_id bigint NULL,
-            in_reply_to_user_id bigint NULL
-            );",
-                            &[])
-            .unwrap();
-        transaction.execute("
         CREATE TABLE twitter_user (
             id bigint PRIMARY KEY,
             name VARCHAR(300) NOT NULL,
             profile_image_url TEXT
+            );",
+                            &[])
+            .unwrap();
+        transaction.execute("
+        CREATE TABLE tweet (
+            id bigint PRIMARY KEY,
+            user_id bigint references twitter_user(id),
+            text VARCHAR(300) NOT NULL,
+            in_reply_to_status_id bigint NULL,
+            in_reply_to_user_id bigint NULL
             );",
                             &[])
             .unwrap();

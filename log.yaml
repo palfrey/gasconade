@@ -9,15 +9,13 @@ root:
 loggers:
     hyper:
         level: info
-    postgres:
-        level: warn
     mime:
         level: info
-    r2d2:
-        level: error
     resolve:
         level: warn
     tokio_core:
         level: info
     tokio_proto:
+        level: info
+    postgres:
         level: info

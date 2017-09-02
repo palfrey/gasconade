@@ -100,19 +100,27 @@ struct Tweet {
 }
 
 fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Tweet {
-    for row in &conn.query("SELECT text, in_reply_to_status_id, in_reply_to_user_id FROM tweet",
-                           &[])
-                    .unwrap() {
+    let tweets = &conn.query("
+    SELECT user_id, text, in_reply_to_status_id, in_reply_to_user_id FROM tweet WHERE id = $1",
+                             &[&id])
+                      .unwrap();
+    if !tweets.is_empty() {
+        let tweet = tweets.get(0);
+        let user_id: i64 = tweet.get(0);
+        let users = &conn.query("SELECT name, profile_image_url FROM twitter_user WHERE id = $1",
+                                &[&user_id])
+                         .unwrap();
+        let user = users.get(0);
         return Tweet {
                    id: id,
                    user: TwitterUser {
-                       id: -1,
-                       name: String::new(),
-                       profile_image_url: String::new(),
+                       id: user_id,
+                       name: user.get(0),
+                       profile_image_url: user.get(1),
                    },
-                   text: row.get(0),
-                   in_reply_to_status_id: row.get(1),
-                   in_reply_to_user_id: row.get(2),
+                   text: tweet.get(1),
+                   in_reply_to_status_id: tweet.get(2),
+                   in_reply_to_user_id: tweet.get(3),
                };
     }
     let client = reqwest::Client::new().unwrap();
@@ -121,7 +129,19 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Tweet {
         .header(Authorization(Bearer { token: TOKEN.clone() }))
         .send()
         .unwrap();
-    return res.json().unwrap();
+    let t: Tweet = res.json().unwrap();
+    let rows = &conn.query("SELECT 1 FROM twitter_user WHERE id = $1", &[&t.user.id]).unwrap();
+    if rows.is_empty() {
+        conn.execute("INSERT INTO twitter_user (id, name, profile_image_url) VALUES ($1,$2,$3)",
+                     &[&t.user.id, &t.user.name, &t.user.profile_image_url])
+            .unwrap();
+    }
+    conn.execute("INSERT INTO tweet
+            (id, user_id, text, in_reply_to_status_id, in_reply_to_user_id)
+            VALUES ($1,$2,$3,$4,$5)",
+                 &[&t.id, &t.user.id, &t.text, &t.in_reply_to_status_id, &t.in_reply_to_user_id])
+        .unwrap();
+    t
 }
 
 pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
@@ -144,7 +164,7 @@ pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
                                    .as_str())
                 .unwrap();
         let t = get_tweet(&conn, id);
-        println!("{:?}", t);
+        info!("{:?}", t);
         return Ok(Response::with((status::Ok, format!("{}", id))));
     } else {
         unimplemented!();
