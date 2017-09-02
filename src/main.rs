@@ -108,7 +108,7 @@ pub fn tweet(mut req: &mut Request) -> IronResult<Response> {
             .send()
             .unwrap();
         let mut content = String::new();
-        res.read_to_string(&mut content);
+        res.read_to_string(&mut content).unwrap();
         println!("{}", content);
         return Ok(Response::with((status::Ok, id)));
     } else {
