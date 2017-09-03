@@ -1,4 +1,68 @@
+<style>
+    @import url("http://platform.twitter.com/css/tweet.b6ca5fbe9fc709c1f1b8c6e02c82d896.light.ltr.css");
+    .twitter-tweet-rendered {
+        width: 100%;
+    }
+</style>
 {{#tweets}}
-{{{html}}}<br />
+{{{html}}}
 {{/tweets}}
-<script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+<script>
+window.twttr = (function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0],
+    t = window.twttr || {};
+  if (d.getElementById(id)) return;
+  js = d.createElement(s);
+  js.id = id;
+  js.src = "//platform.twitter.com/widgets.js";
+  fjs.parentNode.insertBefore(js, fjs);
+
+  t._e = [];
+  t.ready = function(f) {
+    t._e.push(f);
+  };
+
+  return t;
+}(document, "script", "twitter-wjs"));
+
+twttr.ready(function (twttr) {
+    twttr.events.bind(
+        'loaded',
+        function (ev) {
+            console.log("Loaded");
+            var main_header = null;
+            ev.widgets.forEach(function(widget) {
+                var root = null;
+                Array.prototype.forEach.call(widget.shadowRoot.children, function(element) {
+                    if (element.tagName != "STYLE") {
+                        root = element;
+                    }
+                });
+                var header = root.getElementsByClassName("Tweet-header")[0];
+                if (main_header == null) {
+                    main_header = header;
+                }
+                header.parentNode.removeChild(header);
+                var actions = root.getElementsByClassName("Tweet-actions")[0];
+                actions.parentNode.removeChild(actions);
+                var embedded = root.getElementsByClassName("EmbeddedTweet")[0];
+                embedded.removeAttribute("class");
+                var embeddedTweet = root.getElementsByClassName("EmbeddedTweet-tweet")[0];
+                embeddedTweet.style.padding = "1px 2px 1px 10px";
+                var informationCircle = root.getElementsByClassName("tweet-InformationCircle")[0];
+                informationCircle.parentNode.removeChild(informationCircle);
+                var inReplyTo = root.getElementsByClassName("Tweet-inReplyTo");
+                if (inReplyTo.length == 1) {
+                    inReplyTo[0].parentNode.removeChild(inReplyTo[0]);
+                }
+            });
+            console.log("Header", main_header);
+            var first_widget = document.getElementById("twitter-widget-0");
+            first_widget.parentNode.insertBefore(main_header, first_widget);
+            Array.prototype.forEach.call(document.getElementsByClassName("twitter-tweet-rendered"), function(element) {
+                element.style.width = "";
+            });
+        }
+    );
+})
+</script>

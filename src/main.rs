@@ -103,7 +103,7 @@ struct Tweet {
     in_reply_to_user_id: Option<i64>,
 
     // we fill this in from OEmbed, not the original JSON
-    #[serde(skip)]
+    #[serde(default)]
     html: String,
 }
 
@@ -156,13 +156,13 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Tweet {
             .unwrap();
     }
     let mut content = client.get(&format!("https://publish.twitter.com/oembed?
-    url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true",
+url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true",
                                           &t.user.screen_name,
                                           &t.id))
         .unwrap()
         .send()
         .unwrap();
-    let oembed: OEmbed = content.json().unwrap();
+    let oembed: OEmbed = content.json().expect("valid oembed data");
     conn.execute("INSERT INTO tweet
             (id, user_id, text, in_reply_to_status_id, in_reply_to_user_id, html)
             VALUES ($1,$2,$3,$4,$5,$6)",
