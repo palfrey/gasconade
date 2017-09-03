@@ -1,9 +1,4 @@
-<style>
-    @import url("http://platform.twitter.com/css/tweet.b6ca5fbe9fc709c1f1b8c6e02c82d896.light.ltr.css");
-    .twitter-tweet-rendered {
-        width: 100%;
-    }
-</style>
+{{> header}}
 {{#tweets}}
 {{{html}}}
 {{/tweets}}
@@ -66,3 +61,4 @@ twttr.ready(function (twttr) {
     );
 })
 </script>
+{{> footer}}

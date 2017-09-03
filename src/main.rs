@@ -210,8 +210,7 @@ pub fn new_tweet(mut req: &mut Request) -> IronResult<Response> {
                                    .unwrap()
                                    .as_str())
                 .unwrap();
-        let tweets = get_tweets(&conn, id);
-        info!("{:?}", tweets);
+        get_tweets(&conn, id);
         return Ok(Response::with(((status::Found, RedirectRaw(format!("/tweet/{}", id))))));
     } else {
         unimplemented!();
@@ -227,14 +226,19 @@ pub fn tweet(req: &mut Request) -> IronResult<Response> {
                                           .unwrap())
             .unwrap();
     let tweets = get_tweets(&conn, tweet_id);
-    let data = MapBuilder::new().insert("tweets", &tweets).expect("inserting tweets works").build();
+    let data = MapBuilder::new()
+        .insert("tweets", &tweets).expect("inserting tweets works")
+        .insert_str("title", format!("Gasconade - {}", tweets[0].user.name))
+        .build();
     Ok(Response::with((mime!(Text / Html),
                        status::Ok,
                        render_to_response("resources/templates/tweet.mustache", &data))))
 }
 
 pub fn index(_: &mut Request) -> IronResult<Response> {
-    let data = MapBuilder::new().build();
+    let data = MapBuilder::new()
+        .insert_str("title", "Gasconade")
+        .build();
     Ok(Response::with((mime!(Text / Html),
                        status::Ok,
                        render_to_response("resources/templates/index.mustache", &data))))
