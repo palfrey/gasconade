@@ -1,5 +1,10 @@
 {{> header}}
 <h1>Gasconade</h1>
+{{#error}}
+<div class="alert alert-danger" role="alert">
+Error: {{error}}
+</div>
+{{/error}}
 <p class="lead">
     Getting annoyed by "threads" in <a href="https://twitter.com/">Twitter?</a> Wish they'd written a blog post?<br />
     Want that blog post right now? Give me the tweet url!</p>
