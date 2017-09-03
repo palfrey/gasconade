@@ -1,4 +1,33 @@
-<form action="/tweet" method="POST">
-    <input type="text" name="twitter_url" />
-    <input type="submit" />
-</form>
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <link rel="stylesheet"
+        href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta/css/bootstrap.min.css"
+        integrity="sha384-/Y6pD6FV/Vv2HJnA6t+vslU6fwYXjCFtcEpHbNJ0lyAFsXTsjBbfaDjzALeQsN6M"
+        crossorigin="anonymous">
+        <title>Gasconade</title>
+    </head>
+    <body>
+        <div class="container-fluid">
+            <h1>Gasconade</h1>
+            <p class="lead">
+                Getting annoyed by "threads" in <a href="https://twitter.com/">Twitter?</a> Wish they'd written a blog post?<br />
+                Want that blog post right now? Give me the tweet url!</p>
+            <form action="/tweet" method="POST">
+                <div class="form-group">
+                    <label for="twitter_url">Tweet URL</label>
+                    <input type="url"
+                        name="twitter_url"
+                        class="form-control"
+                        required pattern="https://twitter.com/[^/]+/status/(\d+)"
+                        oninvalid="this.setCustomValidity('Please enter a Twitter \'tweet\' URL here')"
+                        oninput="setCustomValidity('')"
+                        placeholder="https://twitter.com/foo/status/12345" />
+                </div>
+                <button type="submit" class="btn btn-primary">Get blog post</button>
+            </form>
+        </div>
+    </body>
+</html>
