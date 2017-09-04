@@ -182,7 +182,11 @@ fn get_tweets(conn: &PostgresConnection, id: i64) -> Result<Vec<Tweet>> {
     let mut current_id = id;
     loop {
         let t = get_tweet(&conn, current_id)?;
-        let next_id: Option<i64> = t.in_reply_to_status_id;
+        let next_id: Option<i64> = if t.in_reply_to_user_id.unwrap_or(-1) == t.user.id {
+            t.in_reply_to_status_id
+        } else {
+            None
+        };
         tweets.insert(0, t);
         if next_id.is_none() {
             break;
