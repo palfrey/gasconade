@@ -40,6 +40,7 @@ twttr.ready(function (twttr) {
                 }
                 else if (widget.tagName == "IFRAME") {
                     root = widget.contentDocument;
+                    widget.style.height = "";
                 }
                 else {
                     console.log("Unrecognised widget type: " + widget.tagName);
