@@ -338,6 +338,10 @@ pub fn index(req: &mut Request) -> IronResult<Response> {
                        render_to_response("resources/templates/index.mustache", &data))))
 }
 
+fn get_server_port() -> u16 {
+    env::var("PORT").unwrap_or("8000".to_string()).parse().unwrap()
+}
+
 fn main() {
     log4rs::init_file("log.yaml", Default::default()).unwrap();
     let db_url: &str = &env::var("DATABASE_URL").expect("Needed DATABASE_URL");
@@ -355,5 +359,5 @@ fn main() {
     chain.link(PRead::<db::PostgresDB>::both(pool));
     info!("Gasconade booted");
     info!("Token is {:?}", *TOKEN);
-    Iron::new(chain).http("0.0.0.0:8000").unwrap();
+    Iron::new(chain).http(("0.0.0.0", get_server_port())).unwrap();
 }
