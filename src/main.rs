@@ -85,7 +85,7 @@ lazy_static! {
     };
 }
 
-#[derive(Deserialize, Debug, RustcEncodable)]
+#[derive(Deserialize, Debug, RustcEncodable, Clone)]
 struct TwitterUser {
     id: i64,
     screen_name: String,
@@ -93,7 +93,7 @@ struct TwitterUser {
     profile_image_url: String,
 }
 
-#[derive(Deserialize, Debug, RustcEncodable)]
+#[derive(Deserialize, Debug, RustcEncodable, Clone)]
 struct Tweet {
     id: i64,
     user: TwitterUser,
@@ -107,48 +107,30 @@ struct Tweet {
 }
 
 #[derive(Deserialize, Debug)]
+struct SearchResults {
+    statuses: Vec<Tweet>,
+}
+
+#[derive(Deserialize, Debug)]
 struct OEmbed {
     html: String,
 }
 
-fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
-    let tweets = &conn.query("
-    SELECT user_id, text,
-    in_reply_to_status_id,
-    in_reply_to_user_id, html FROM tweet WHERE id = $1",
-                             &[&id])
-                      .unwrap();
-    if !tweets.is_empty() {
-        let tweet = tweets.get(0);
-        let user_id: i64 = tweet.get(0);
-        let users = &conn.query("
-            SELECT name, profile_image_url, username FROM twitter_user WHERE id = $1",
-                                &[&user_id])
-                         .unwrap();
-        let user = users.get(0);
-        return Ok(Tweet {
-                      id: id,
-                      user: TwitterUser {
-                          id: user_id,
-                          name: user.get(0),
-                          profile_image_url: user.get(1),
-                          screen_name: user.get(2),
-                      },
-                      text: tweet.get(1),
-                      in_reply_to_status_id: tweet.get(2),
-                      in_reply_to_user_id: tweet.get(3),
-                      html: tweet.get(4),
-                  });
+fn get_user_from_db(conn: &db::PostgresConnection, user_id: i64) -> TwitterUser {
+    let users = &conn.query("
+        SELECT name, profile_image_url, username FROM twitter_user WHERE id = $1",
+                            &[&user_id])
+                     .unwrap();
+    let user = users.get(0);
+    TwitterUser {
+        id: user_id,
+        name: user.get(0),
+        profile_image_url: user.get(1),
+        screen_name: user.get(2),
     }
-    let client = reqwest::Client::new().unwrap();
-    let res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
-        .unwrap()
-        .header(Authorization(Bearer { token: TOKEN.clone() }))
-        .send()
-        .unwrap();
-    let t: Tweet = res.error_for_status()
-        .chain_err(|| ErrorKind::NoSuchTweet(id))?
-        .json()?;
+}
+
+fn store_tweet(conn: &db::PostgresConnection, t: &Tweet) {
     let rows = &conn.query("SELECT 1 FROM twitter_user WHERE id = $1", &[&t.user.id]).unwrap();
     if rows.is_empty() {
         conn.execute("
@@ -156,6 +138,7 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
                      &[&t.user.id, &t.user.name, &t.user.profile_image_url, &t.user.screen_name])
             .unwrap();
     }
+    let client = reqwest::Client::new().unwrap();
     let mut content = client.get(&format!("https://publish.twitter.com/oembed?
 url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true",
                                           &t.user.screen_name,
@@ -174,10 +157,40 @@ url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true"
                    &t.in_reply_to_user_id,
                    &oembed.html])
         .unwrap();
+}
+
+fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
+    let tweets = &conn.query("
+    SELECT user_id, text,
+    in_reply_to_status_id,
+    in_reply_to_user_id, html FROM tweet WHERE id = $1",
+                             &[&id])
+                      .unwrap();
+    if !tweets.is_empty() {
+        let tweet = tweets.get(0);
+        return Ok(Tweet {
+                      id: id,
+                      user: get_user_from_db(conn, tweet.get(0)),
+                      text: tweet.get(1),
+                      in_reply_to_status_id: tweet.get(2),
+                      in_reply_to_user_id: tweet.get(3),
+                      html: tweet.get(4),
+                  });
+    }
+    let client = reqwest::Client::new().unwrap();
+    let res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
+        .unwrap()
+        .header(Authorization(Bearer { token: TOKEN.clone() }))
+        .send()
+        .unwrap();
+    let t: Tweet = res.error_for_status()
+        .chain_err(|| ErrorKind::NoSuchTweet(id))?
+        .json()?;
+    store_tweet(conn, &t);
     Ok(t)
 }
 
-fn get_tweets(conn: &PostgresConnection, id: i64) -> Result<Vec<Tweet>> {
+fn get_tweets(conn: &PostgresConnection, id: i64, future_tweets: bool) -> Result<Vec<Tweet>> {
     let mut tweets: Vec<Tweet> = Vec::new();
     let mut current_id = id;
     loop {
@@ -192,6 +205,57 @@ fn get_tweets(conn: &PostgresConnection, id: i64) -> Result<Vec<Tweet>> {
             break;
         }
         current_id = next_id.unwrap();
+    }
+    if future_tweets {
+        let client = reqwest::Client::new().unwrap();
+        let mut current = {
+            let last = tweets.last();
+            last.unwrap().clone()
+        };
+        loop {
+            let tweets_query = &conn.query("
+            SELECT id, user_id, text,
+            in_reply_to_status_id,
+            in_reply_to_user_id, html FROM tweet WHERE in_reply_to_status_id = $1",
+                                           &[&current.id])
+                                    .unwrap();
+            if !tweets_query.is_empty() {
+                let tweet = tweets_query.get(0);
+                let t = Tweet {
+                    id: tweet.get(0),
+                    user: get_user_from_db(conn, tweet.get(1)),
+                    text: tweet.get(2),
+                    in_reply_to_status_id: tweet.get(3),
+                    in_reply_to_user_id: tweet.get(4),
+                    html: tweet.get(5),
+                };
+                current = t.clone();
+                tweets.push(t);
+                continue;
+            }
+
+            let mut res = client.get(&format!("https://api.twitter.com/1.1/search/tweets.json
+?q=to%3A{name}%20from%3A{name}&since_id={id}&include_entities=false&count=100",
+                                              name = current.user.screen_name,
+                                              id = current.id))
+                .unwrap()
+                .header(Authorization(Bearer { token: TOKEN.clone() }))
+                .send()
+                .unwrap();
+            let future_tweets: SearchResults = res.json().unwrap();
+            let mut found_extra = false;
+            for t in future_tweets.statuses {
+                if t.in_reply_to_status_id.unwrap_or(-1) == current.id {
+                    store_tweet(conn, &t);
+                    current = t.clone();
+                    tweets.push(t);
+                    found_extra = true;
+                }
+            }
+            if !found_extra {
+                break;
+            }
+        }
     }
     Ok(tweets)
 }
@@ -215,8 +279,9 @@ pub fn new_tweet(mut req: &mut Request) -> IronResult<Response> {
                                    .unwrap()
                                    .as_str())
                 .unwrap();
-        get_tweets(&conn, id)?;
-        return Ok(Response::with(((status::Found, RedirectRaw(format!("/tweet/{}", id))))));
+        let tweets = get_tweets(&conn, id, true)?;
+        return Ok(Response::with(((status::Found,
+                                   RedirectRaw(format!("/tweet/{}", tweets.last().unwrap().id))))));
     } else {
         unimplemented!();
     }
@@ -230,7 +295,7 @@ pub fn tweet(req: &mut Request) -> IronResult<Response> {
                                           .find("tweet_id")
                                           .unwrap())
             .unwrap();
-    let tweets = get_tweets(&conn, tweet_id)?;
+    let tweets = get_tweets(&conn, tweet_id, false)?;
     let data = MapBuilder::new()
         .insert("tweets", &tweets)
         .expect("inserting tweets works")
