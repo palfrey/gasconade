@@ -13,6 +13,7 @@ Local running
 2. [Install Rust](https://www.rust-lang.org/en-US/install.html)
 3. Copy `config.yaml.example` to `config.yaml` and replace `key`/`secret` with keys from a [Twitter app you've registered](https://apps.twitter.com/)
 4. `cargo run`
+5. Open [http://localhost:8000](http://localhost:8000)
 
 Heroku running
 --------------
