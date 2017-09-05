@@ -32,6 +32,7 @@ twttr.ready(function (twttr) {
             ev.widgets.forEach(function(widget) {
                 var root = null;
                 if (widget.tagName == "TWITTERWIDGET") {
+                    widget.style.width = "";
                     Array.prototype.forEach.call(widget.shadowRoot.children, function(element) {
                         if (element.tagName != "STYLE") {
                             root = element;
