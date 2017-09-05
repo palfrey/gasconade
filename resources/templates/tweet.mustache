@@ -31,11 +31,20 @@ twttr.ready(function (twttr) {
             var main_header = null;
             ev.widgets.forEach(function(widget) {
                 var root = null;
-                Array.prototype.forEach.call(widget.shadowRoot.children, function(element) {
-                    if (element.tagName != "STYLE") {
-                        root = element;
-                    }
-                });
+                if (widget.tagName == "TWITTERWIDGET") {
+                    Array.prototype.forEach.call(widget.shadowRoot.children, function(element) {
+                        if (element.tagName != "STYLE") {
+                            root = element;
+                        }
+                    });
+                }
+                else if (widget.tagName == "IFRAME") {
+                    root = widget.contentDocument;
+                }
+                else {
+                    console.log("Unrecognised widget type: " + widget.tagName);
+                    return;
+                }
                 var header = root.getElementsByClassName("Tweet-header")[0];
                 if (main_header == null) {
                     main_header = header;
