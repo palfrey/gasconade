@@ -63,6 +63,12 @@ twttr.ready(function (twttr) {
                 if (inReplyTo.length == 1) {
                     inReplyTo[0].parentNode.removeChild(inReplyTo[0]);
                 }
+                Array.prototype.forEach.call(root.getElementsByClassName("MediaCard"), function(element) {
+                    element.style["max-width"] = "500px";
+                });
+                Array.prototype.forEach.call(root.getElementsByClassName("TwitterCard-container"), function(element) {
+                    element.style["max-width"] = "500px";
+                });
             });
             console.log("Header", main_header);
             var first_widget = document.getElementById("twitter-widget-0");
