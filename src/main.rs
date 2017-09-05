@@ -69,8 +69,22 @@ struct BearerToken {
 
 lazy_static! {
     static ref CONFIG: Config = {
-        let f = File::open("config.yaml").unwrap();
-        serde_yaml::from_reader(f).unwrap()
+        if env::var("DYNO").is_ok() {
+            // Heroku, so assume environment variables
+            Config {
+                twitter: TwitterConfig {
+                    key: env::var("TWITTER_KEY")
+                        .expect("Need TWITTER_KEY environment variable"),
+                    secret: env::var("TWITTER_SECRET")
+                        .expect("Need TWITTER_SECRET environment variable"),
+                }
+            }
+        }
+        else {
+            // Local, so assume config file
+            let f = File::open("config.yaml").expect("Need config.yaml");
+            serde_yaml::from_reader(f).unwrap()
+        }
     };
     static ref TOKEN: String = {
         let client = reqwest::Client::new().unwrap();
