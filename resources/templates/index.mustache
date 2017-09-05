@@ -14,7 +14,7 @@ Error: {{error}}
         <input type="url"
             name="twitter_url"
             class="form-control"
-            required pattern="https://twitter.com/[^/]+/status/(\d+)"
+            required pattern="https://twitter.com/[^/]+/status/(\d+)(\?.*)?"
             oninvalid="this.setCustomValidity('Please enter a Twitter \'tweet\' URL here')"
             oninput="setCustomValidity('')"
             placeholder="https://twitter.com/foo/status/12345" />
