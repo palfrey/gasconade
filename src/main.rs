@@ -282,7 +282,7 @@ pub fn new_tweet(mut req: &mut Request) -> IronResult<Response> {
         return Ok(Response::with(status::NotFound));
     }
     let url_value = find_url.unwrap();
-    let re = regex::Regex::new(r"https://twitter.com/[^/]+/status/(\d+)").unwrap();
+    let re = regex::Regex::new(r"twitter.com/[^/]+/status/(\d+)").unwrap();
     if let &Value::String(ref url) = url_value {
         let raw_caps = re.captures(url);
         if raw_caps.is_none() {
