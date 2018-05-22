@@ -274,7 +274,7 @@ fn get_tweets(conn: &PostgresConnection, id: i64, future_tweets: bool) -> Result
     Ok(tweets)
 }
 
-pub fn new_tweet(mut req: &mut Request) -> IronResult<Response> {
+pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
     let conn = get_pg_connection!(&req);
     let map = req.get_ref::<Params>().unwrap();
     let find_url = map.find(&["twitter_url"]);
@@ -294,8 +294,8 @@ pub fn new_tweet(mut req: &mut Request) -> IronResult<Response> {
                                    .as_str())
                 .unwrap();
         let tweets = get_tweets(&conn, id, true)?;
-        return Ok(Response::with(((status::Found,
-                                   RedirectRaw(format!("/tweet/{}", tweets.last().unwrap().id))))));
+        return Ok(Response::with((status::Found,
+                                   RedirectRaw(format!("/tweet/{}", tweets.last().unwrap().id)))));
     } else {
         unimplemented!();
     }
