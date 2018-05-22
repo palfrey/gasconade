@@ -11,10 +11,10 @@ Error: {{error}}
 <form action="/tweet" method="POST">
     <div class="form-group">
         <label for="twitter_url">Tweet URL</label>
-        <input type="url"
+        <input
             name="twitter_url"
             class="form-control"
-            required pattern=".*twitter.com/[^/]+/status/(\d+)(\?.*)?"
+            required pattern=".*twitter.com/[^/]+/status/(\d+).*"
             oninvalid="this.setCustomValidity('Please enter a Twitter \'tweet\' URL here')"
             oninput="setCustomValidity('')"
             placeholder="https://twitter.com/foo/status/12345" />
