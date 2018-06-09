@@ -122,7 +122,7 @@ struct Tweet {
 
 #[derive(Deserialize, Debug)]
 struct TwitterError {
-    code: u32,
+    code: u16,
     message: String
 }
 
@@ -211,7 +211,13 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
     if res.status().is_client_error() {
         let err: TwitterErrors = res.json().unwrap();
         warn!("Error: {:?}", err);
-        return Err(ErrorKind::NoSuchTweet(id).into());
+        let first = err.errors.first().unwrap();
+        if first.code == 144 {
+            return Err(ErrorKind::NoSuchTweet(id).into());
+        }
+        else {
+            return Err(ErrorKind::OtherTwitterError(first.code, first.message.clone()).into());
+        }
     }
     else {
         let t: Tweet = res.json()?;
