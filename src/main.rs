@@ -121,6 +121,17 @@ struct Tweet {
 }
 
 #[derive(Deserialize, Debug)]
+struct TwitterError {
+    code: u32,
+    message: String
+}
+
+#[derive(Deserialize, Debug)]
+struct TwitterErrors {
+    errors: Vec<TwitterError>
+}
+
+#[derive(Deserialize, Debug)]
 struct SearchResults {
     statuses: Vec<Tweet>,
 }
@@ -192,16 +203,21 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
                   });
     }
     let client = reqwest::Client::new().unwrap();
-    let res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
+    let mut res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
         .unwrap()
         .header(Authorization(Bearer { token: TOKEN.clone() }))
         .send()
         .unwrap();
-    let t: Tweet = res.error_for_status()
-        .chain_err(|| ErrorKind::NoSuchTweet(id))?
-        .json()?;
-    store_tweet(conn, &t);
-    Ok(t)
+    if res.status().is_client_error() {
+        let err: TwitterErrors = res.json().unwrap();
+        warn!("Error: {:?}", err);
+        return Err(ErrorKind::NoSuchTweet(id).into());
+    }
+    else {
+        let t: Tweet = res.json()?;
+        store_tweet(conn, &t);
+        Ok(t)
+    }
 }
 
 fn get_tweets(conn: &PostgresConnection, id: i64, future_tweets: bool) -> Result<Vec<Tweet>> {
