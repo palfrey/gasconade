@@ -29,7 +29,6 @@ macro_rules! get_pg_connection {
 }
 
 pub fn get_pool(uri: &str) -> PostgresPool {
-    let manager =
-        PostgresConnectionManager::new(uri, TlsMode::None).expect("Needed a working DATABASE_URL");
+    let manager = PostgresConnectionManager::new(uri, TlsMode::None).expect("Needed a working DATABASE_URL");
     r2d2::Pool::new(r2d2::Config::default(), manager).unwrap()
 }

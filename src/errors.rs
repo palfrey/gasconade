@@ -26,10 +26,14 @@ impl From<Error> for iron::IronError {
                                                       .to_owned())))
             }
             Error(ErrorKind::OtherTwitterError(code, message, original_url), _) => {
-                let url = format!("/?error=Got an error from Twitter. The tweet might have a new id. <a href=\"{}\">Try visiting it?</a> (Code: {} Message: {})", original_url, code, message);
+                let url = format!(concat!("/?error=Got an error from Twitter. ",
+                                          "The tweet might have a new id. ",
+                                          "<a href=\"{}\">Try visiting it?</a> (Code: {} Message: {})"),
+                                  original_url,
+                                  code,
+                                  message);
                 iron::IronError::new(Error::from(ErrorKind::OtherTwitterError(code, message, original_url)),
-                                     (iron::status::Found,
-                                      RedirectRaw(url)))
+                                     (iron::status::Found, RedirectRaw(url)))
             }
             _ => {
                 let msg = format!("{}", e);

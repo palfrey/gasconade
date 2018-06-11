@@ -123,12 +123,12 @@ struct Tweet {
 #[derive(Deserialize, Debug)]
 struct TwitterError {
     code: u16,
-    message: String
+    message: String,
 }
 
 #[derive(Deserialize, Debug)]
 struct TwitterErrors {
-    errors: Vec<TwitterError>
+    errors: Vec<TwitterError>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -142,10 +142,10 @@ struct OEmbed {
 }
 
 fn get_user_from_db(conn: &db::PostgresConnection, user_id: i64) -> TwitterUser {
-    let users = &conn.query("
-        SELECT name, profile_image_url, username FROM twitter_user WHERE id = $1",
+    let users = &conn.query(concat!("SELECT name, profile_image_url, username ",
+                                    "FROM twitter_user WHERE id = $1"),
                             &[&user_id])
-                     .unwrap();
+        .unwrap();
     let user = users.get(0);
     TwitterUser {
         id: user_id,
@@ -156,25 +156,30 @@ fn get_user_from_db(conn: &db::PostgresConnection, user_id: i64) -> TwitterUser 
 }
 
 fn store_tweet(conn: &db::PostgresConnection, t: &Tweet) {
-    let rows = &conn.query("SELECT 1 FROM twitter_user WHERE id = $1", &[&t.user.id]).unwrap();
+    let rows = &conn.query("SELECT 1 FROM twitter_user WHERE id = $1", &[&t.user.id])
+        .unwrap();
     if rows.is_empty() {
-        conn.execute("
-        INSERT INTO twitter_user (id, name, profile_image_url, username) VALUES ($1,$2,$3,$4)",
-                     &[&t.user.id, &t.user.name, &t.user.profile_image_url, &t.user.screen_name])
+        conn.execute(concat!("INSERT INTO twitter_user ",
+                             "(id, name, profile_image_url, username) VALUES ($1,$2,$3,$4)"),
+                     &[&t.user.id,
+                       &t.user.name,
+                       &t.user.profile_image_url,
+                       &t.user.screen_name])
             .unwrap();
     }
     let client = reqwest::Client::new().unwrap();
-    let mut content = client.get(&format!("https://publish.twitter.com/oembed?
-url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true",
-                                          &t.user.screen_name,
-                                          &t.id))
+    let mut content = client
+        .get(&format!(concat!("https://publish.twitter.com/oembed?url=https://twitter.com/{}/status/{}&",
+                              "hide_thread=true&omit_script=true&dnt=true"),
+                      &t.user.screen_name,
+                      &t.id))
         .unwrap()
         .send()
         .unwrap();
     let oembed: OEmbed = content.json().expect("valid oembed data");
-    conn.execute("INSERT INTO tweet
-            (id, user_id, text, in_reply_to_status_id, in_reply_to_user_id, html)
-            VALUES ($1,$2,$3,$4,$5,$6)",
+    conn.execute(concat!("INSERT INTO tweet ",
+                         "(id, user_id, text, in_reply_to_status_id, in_reply_to_user_id, html) ",
+                         "VALUES ($1,$2,$3,$4,$5,$6)"),
                  &[&t.id,
                    &t.user.id,
                    &t.text,
@@ -185,12 +190,11 @@ url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true"
 }
 
 fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet> {
-    let tweets = &conn.query("
-    SELECT user_id, text,
-    in_reply_to_status_id,
-    in_reply_to_user_id, html FROM tweet WHERE id = $1",
+    let tweets = &conn.query(concat!("SELECT user_id, text, in_reply_to_status_id, ",
+                                     "in_reply_to_user_id, html ",
+                                     "FROM tweet WHERE id = $1"),
                              &[&id])
-                      .unwrap();
+        .unwrap();
     if !tweets.is_empty() {
         let tweet = tweets.get(0);
         return Ok(Tweet {
@@ -202,8 +206,13 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
                       html: tweet.get(4),
                   });
     }
-    let client = reqwest::Client::builder().unwrap().redirect(reqwest::RedirectPolicy::none()).build().unwrap();
-    let mut res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
+    let client = reqwest::Client::builder()
+        .unwrap()
+        .redirect(reqwest::RedirectPolicy::none())
+        .build()
+        .unwrap();
+    let mut res = client
+        .get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
         .unwrap()
         .header(Authorization(Bearer { token: TOKEN.clone() }))
         .send()
@@ -214,12 +223,13 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
         let first = err.errors.first().unwrap();
         if first.code == 144 {
             return Err(ErrorKind::NoSuchTweet(id).into());
+        } else {
+            return Err(ErrorKind::OtherTwitterError(first.code,
+                                                    first.message.clone(),
+                                                    format!("https://twitter.com/{}/status/{}", name, id))
+                           .into());
         }
-        else {
-            return Err(ErrorKind::OtherTwitterError(first.code, first.message.clone(), format!("https://twitter.com/{}/status/{}", name, id)).into());
-        }
-    }
-    else {
+    } else {
         let t: Tweet = res.json()?;
         store_tweet(conn, &t);
         Ok(t)
@@ -249,12 +259,11 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
             last.unwrap().clone()
         };
         loop {
-            let tweets_query = &conn.query("
-            SELECT id, user_id, text,
-            in_reply_to_status_id,
-            in_reply_to_user_id, html FROM tweet WHERE in_reply_to_status_id = $1",
-                                           &[&current.id])
-                                    .unwrap();
+            let tweets_query =
+                &conn.query(concat!("SELECT id, user_id, text, in_reply_to_status_id,",
+                                    "in_reply_to_user_id, html FROM tweet WHERE in_reply_to_status_id = $1"),
+                            &[&current.id])
+                    .unwrap();
             if !tweets_query.is_empty() {
                 let tweet = tweets_query.get(0);
                 let t = Tweet {
@@ -270,10 +279,12 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
                 continue;
             }
 
-            let mut res = client.get(&format!("https://api.twitter.com/1.1/search/tweets.json
-?q=to%3A{name}%20from%3A{name}&since_id={id}&include_entities=false&count=100",
-                                              name = current.user.screen_name,
-                                              id = current.id))
+            let mut res = client
+                .get(&format!(concat!("https://api.twitter.com/1.1/search/tweets.json?",
+                            "q=to%3A{name}%20from%3A{name}&since_id={id}&include_entities=false&count=100"),
+                    name = current.user.screen_name,
+                    id = current.id
+                ))
                 .unwrap()
                 .header(Authorization(Bearer { token: TOKEN.clone() }))
                 .send()
@@ -311,14 +322,11 @@ pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
             return Ok(Response::with(status::BadRequest));
         }
         let caps = raw_caps.unwrap();
-        let id = i64::from_str(caps.get(2)
-                                   .unwrap()
-                                   .as_str())
-                .unwrap();
+        let id = i64::from_str(caps.get(2).unwrap().as_str()).unwrap();
         let name = caps.get(1).unwrap().as_str();
         let tweets = get_tweets(&conn, name, id, true)?;
         return Ok(Response::with((status::Found,
-                                   RedirectRaw(format!("/tweet/{}", tweets.last().unwrap().id)))));
+                                  RedirectRaw(format!("/tweet/{}/{}", name, tweets.last().unwrap().id)))));
     } else {
         unimplemented!();
     }
@@ -326,14 +334,9 @@ pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
 
 pub fn tweet(req: &mut Request) -> IronResult<Response> {
     let conn = get_pg_connection!(&req);
-    let router = req.extensions
-                    .get::<Router>()
-                    .unwrap();
-    let tweet_id: i64 = i64::from_str(router
-                                          .find("tweet_id")
-                                          .unwrap())
-            .unwrap();
-    let name = router.find("name").unwrap();
+    let router = req.extensions.get::<Router>().unwrap();
+    let tweet_id: i64 = i64::from_str(router.find("tweet_id").unwrap()).unwrap();
+    let name = router.find("name").unwrap_or("");
     let tweets = get_tweets(&conn, name, tweet_id, false)?;
     let data = MapBuilder::new()
         .insert("tweets", &tweets)
@@ -351,11 +354,12 @@ pub fn index(req: &mut Request) -> IronResult<Response> {
     let data = MapBuilder::new()
         .insert_str("title", "Gasconade")
         .insert_str("error",
-                    error.map(|v| if let &params::Value::String(ref s) = v {
-                                  s.to_owned()
-                              } else {
-                                  String::default()
-                              })
+                    error
+                        .map(|v| if let &params::Value::String(ref s) = v {
+                                 s.to_owned()
+                             } else {
+                                 String::default()
+                             })
                         .unwrap_or(String::default()))
         .build();
     Ok(Response::with((mime!(Text / Html),
@@ -364,7 +368,10 @@ pub fn index(req: &mut Request) -> IronResult<Response> {
 }
 
 fn get_server_port() -> u16 {
-    env::var("PORT").unwrap_or("8000".to_string()).parse().unwrap()
+    env::var("PORT")
+        .unwrap_or("8000".to_string())
+        .parse()
+        .unwrap()
 }
 
 fn main() {
@@ -377,12 +384,15 @@ fn main() {
     let mut router = Router::new();
     router.get("/", index, "index");
     router.post("/tweet", new_tweet, "query tweet");
-    router.get("/tweet/:name/:tweet_id", tweet, "tweet");
+    router.get("/tweet/:name/:tweet_id", tweet, "tweet_with_name");
+    router.get("/tweet/:tweet_id", tweet, "tweet");
     let mut chain = Chain::new(router);
     chain.link_before(logger_before);
     chain.link_after(logger_after);
     chain.link(PRead::<db::PostgresDB>::both(pool));
     info!("Gasconade booted");
     info!("Token is {:?}", *TOKEN);
-    Iron::new(chain).http(("0.0.0.0", get_server_port())).unwrap();
+    Iron::new(chain)
+        .http(("0.0.0.0", get_server_port()))
+        .unwrap();
 }
