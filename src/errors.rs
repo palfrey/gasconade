@@ -12,7 +12,7 @@ error_chain! {
             description("Can't find a tweet with that id")
             display("Unable to read tweet `{}`", id)
         }
-        OtherTwitterError(code: u16, message: String)
+        OtherTwitterError(code: u16, message: String, original_url: String)
     }
 }
 
@@ -25,9 +25,9 @@ impl From<Error> for iron::IronError {
                                       RedirectRaw("/?error=Can't%20find%20tweet%20with%20that%20URL"
                                                       .to_owned())))
             }
-            Error(ErrorKind::OtherTwitterError(code, message), _) => {
-                let url = format!("/?error=Got an error from Twitter. The tweet might have a new id. Try visiting it? (Code: {} Message: {})", code, message);
-                iron::IronError::new(Error::from(ErrorKind::OtherTwitterError(code, message)),
+            Error(ErrorKind::OtherTwitterError(code, message, original_url), _) => {
+                let url = format!("/?error=Got an error from Twitter. The tweet might have a new id. <a href=\"{}\">Try visiting it?</a> (Code: {} Message: {})", original_url, code, message);
+                iron::IronError::new(Error::from(ErrorKind::OtherTwitterError(code, message, original_url)),
                                      (iron::status::Found,
                                       RedirectRaw(url)))
             }

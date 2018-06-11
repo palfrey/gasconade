@@ -184,7 +184,7 @@ url=https://twitter.com/{}/status/{}&hide_thread=true&omit_script=true&dnt=true"
         .unwrap();
 }
 
-fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
+fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet> {
     let tweets = &conn.query("
     SELECT user_id, text,
     in_reply_to_status_id,
@@ -202,7 +202,7 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
                       html: tweet.get(4),
                   });
     }
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::builder().unwrap().redirect(reqwest::RedirectPolicy::none()).build().unwrap();
     let mut res = client.get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
         .unwrap()
         .header(Authorization(Bearer { token: TOKEN.clone() }))
@@ -216,7 +216,7 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
             return Err(ErrorKind::NoSuchTweet(id).into());
         }
         else {
-            return Err(ErrorKind::OtherTwitterError(first.code, first.message.clone()).into());
+            return Err(ErrorKind::OtherTwitterError(first.code, first.message.clone(), format!("https://twitter.com/{}/status/{}", name, id)).into());
         }
     }
     else {
@@ -226,11 +226,11 @@ fn get_tweet(conn: &db::PostgresConnection, id: i64) -> Result<Tweet> {
     }
 }
 
-fn get_tweets(conn: &PostgresConnection, id: i64, future_tweets: bool) -> Result<Vec<Tweet>> {
+fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: bool) -> Result<Vec<Tweet>> {
     let mut tweets: Vec<Tweet> = Vec::new();
     let mut current_id = id;
     loop {
-        let t = get_tweet(&conn, current_id)?;
+        let t = get_tweet(&conn, name, current_id)?;
         let next_id: Option<i64> = if t.in_reply_to_user_id.unwrap_or(-1) == t.user.id {
             t.in_reply_to_status_id
         } else {
@@ -304,18 +304,19 @@ pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
         return Ok(Response::with(status::NotFound));
     }
     let url_value = find_url.unwrap();
-    let re = regex::Regex::new(r"twitter.com/[^/]+/status/(\d+)").unwrap();
+    let re = regex::Regex::new(r"twitter.com/([^/]+)/status/(\d+)").unwrap();
     if let &Value::String(ref url) = url_value {
         let raw_caps = re.captures(url);
         if raw_caps.is_none() {
             return Ok(Response::with(status::BadRequest));
         }
-        let id = i64::from_str(raw_caps.unwrap()
-                                   .get(1)
+        let caps = raw_caps.unwrap();
+        let id = i64::from_str(caps.get(2)
                                    .unwrap()
                                    .as_str())
                 .unwrap();
-        let tweets = get_tweets(&conn, id, true)?;
+        let name = caps.get(1).unwrap().as_str();
+        let tweets = get_tweets(&conn, name, id, true)?;
         return Ok(Response::with((status::Found,
                                    RedirectRaw(format!("/tweet/{}", tweets.last().unwrap().id)))));
     } else {
@@ -325,13 +326,15 @@ pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
 
 pub fn tweet(req: &mut Request) -> IronResult<Response> {
     let conn = get_pg_connection!(&req);
-    let tweet_id: i64 = i64::from_str(req.extensions
-                                          .get::<Router>()
-                                          .unwrap()
+    let router = req.extensions
+                    .get::<Router>()
+                    .unwrap();
+    let tweet_id: i64 = i64::from_str(router
                                           .find("tweet_id")
                                           .unwrap())
             .unwrap();
-    let tweets = get_tweets(&conn, tweet_id, false)?;
+    let name = router.find("name").unwrap();
+    let tweets = get_tweets(&conn, name, tweet_id, false)?;
     let data = MapBuilder::new()
         .insert("tweets", &tweets)
         .expect("inserting tweets works")
@@ -374,7 +377,7 @@ fn main() {
     let mut router = Router::new();
     router.get("/", index, "index");
     router.post("/tweet", new_tweet, "query tweet");
-    router.get("/tweet/:tweet_id", tweet, "tweet");
+    router.get("/tweet/:name/:tweet_id", tweet, "tweet");
     let mut chain = Chain::new(router);
     chain.link_before(logger_before);
     chain.link_after(logger_after);
