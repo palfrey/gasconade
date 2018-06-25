@@ -1,3 +1,5 @@
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fpalfrey%2Fgasconade.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fpalfrey%2Fgasconade?ref=badge_shield)
+
 Gasconade
 =========
 
@@ -22,3 +24,6 @@ Heroku running
 2. `heroku create --buildpack https://github.com/emk/heroku-buildpack-rust.git`
 3. Add Heroku Postgres
 4. Set TWITTER_KEY and TWITTER_SECRET config vars as per `key`/`secret` from local running
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fpalfrey%2Fgasconade.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fpalfrey%2Fgasconade?ref=badge_large)
