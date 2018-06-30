@@ -1,5 +1,6 @@
 Gasconade
 =========
+[![dependency status](https://deps.rs/repo/github/palfrey/gasconade/status.svg)](https://deps.rs/repo/github/palfrey/gasconade)
 
 _n. extravagant boasting; boastful talk_
 
