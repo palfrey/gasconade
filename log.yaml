@@ -17,5 +17,7 @@ loggers:
         level: info
     tokio_proto:
         level: info
+    tokio_reactor:
+        level: info
     postgres:
         level: info
