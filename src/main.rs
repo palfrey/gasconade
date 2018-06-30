@@ -87,8 +87,8 @@ lazy_static! {
         }
     };
     static ref TOKEN: String = {
-        let client = reqwest::Client::new().unwrap();
-        let mut res = client.post("https://api.twitter.com/oauth2/token").unwrap()
+        let client = reqwest::Client::new();
+        let mut res = client.post("https://api.twitter.com/oauth2/token")
             .basic_auth(CONFIG.twitter.key.clone(), Some(CONFIG.twitter.secret.clone()))
             .header(reqwest::header::ContentType::form_url_encoded())
             .body("grant_type=client_credentials")
@@ -99,7 +99,7 @@ lazy_static! {
     };
 }
 
-#[derive(Deserialize, Debug, RustcEncodable, Clone)]
+#[derive(Deserialize, Serialize, Debug, RustcEncodable, Clone)]
 struct TwitterUser {
     id: i64,
     screen_name: String,
@@ -107,7 +107,7 @@ struct TwitterUser {
     profile_image_url: String,
 }
 
-#[derive(Deserialize, Debug, RustcEncodable, Clone)]
+#[derive(Deserialize, Serialize, Debug, RustcEncodable, Clone)]
 struct Tweet {
     id: i64,
     user: TwitterUser,
@@ -167,13 +167,12 @@ fn store_tweet(conn: &db::PostgresConnection, t: &Tweet) {
                        &t.user.screen_name])
             .unwrap();
     }
-    let client = reqwest::Client::new().unwrap();
+    let client = reqwest::Client::new();
     let mut content = client
         .get(&format!(concat!("https://publish.twitter.com/oembed?url=https://twitter.com/{}/status/{}&",
                               "hide_thread=true&omit_script=true&dnt=true"),
                       &t.user.screen_name,
                       &t.id))
-        .unwrap()
         .send()
         .unwrap();
     let oembed: OEmbed = content.json().expect("valid oembed data");
@@ -207,13 +206,11 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
                   });
     }
     let client = reqwest::Client::builder()
-        .unwrap()
         .redirect(reqwest::RedirectPolicy::none())
         .build()
         .unwrap();
     let mut res = client
         .get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
-        .unwrap()
         .header(Authorization(Bearer { token: TOKEN.clone() }))
         .send()
         .unwrap();
@@ -253,7 +250,7 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
         current_id = next_id.unwrap();
     }
     if future_tweets {
-        let client = reqwest::Client::new().unwrap();
+        let client = reqwest::Client::new();
         let mut current = {
             let last = tweets.last();
             last.unwrap().clone()
@@ -285,7 +282,6 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
                     name = current.user.screen_name,
                     id = current.id
                 ))
-                .unwrap()
                 .header(Authorization(Bearer { token: TOKEN.clone() }))
                 .send()
                 .unwrap();
