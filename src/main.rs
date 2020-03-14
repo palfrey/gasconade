@@ -37,7 +37,6 @@ use persistent::Read as PRead;
 use mustache::MapBuilder;
 use params::{Params, Value};
 use std::fs::File;
-use reqwest::header::{Authorization, Bearer};
 use std::str::FromStr;
 use iron::modifiers::RedirectRaw;
 use db::PostgresConnection;
@@ -90,7 +89,7 @@ lazy_static! {
         let client = reqwest::Client::new();
         let mut res = client.post("https://api.twitter.com/oauth2/token")
             .basic_auth(CONFIG.twitter.key.clone(), Some(CONFIG.twitter.secret.clone()))
-            .header(reqwest::header::ContentType::form_url_encoded())
+            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body("grant_type=client_credentials")
             .send().unwrap();
         let content: BearerToken = res.json().unwrap();
@@ -211,7 +210,7 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
         .unwrap();
     let mut res = client
         .get(&format!("https://api.twitter.com/1.1/statuses/show.json?id={}", id))
-        .header(Authorization(Bearer { token: TOKEN.clone() }))
+        .bearer_auth(TOKEN.clone())
         .send()
         .unwrap();
     if res.status().is_client_error() {
@@ -282,7 +281,7 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
                     name = current.user.screen_name,
                     id = current.id
                 ))
-                .header(Authorization(Bearer { token: TOKEN.clone() }))
+                .bearer_auth(TOKEN.clone())
                 .send()
                 .unwrap();
             let future_tweets: SearchResults = res.json().unwrap();

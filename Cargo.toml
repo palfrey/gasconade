@@ -5,7 +5,7 @@ authors = ["Tom Parker <palfrey@tevp.net>"]
 
 [dependencies]
 schemamama = "*"
-schemamama_postgres = "*"
+schemamama_postgres = "=0.2.2"
 url = "*"
 postgres = {features=["with-uuid","with-serde_json"], version="^0.15"}
 iron = "*"
@@ -22,7 +22,7 @@ mime = "0.2" # because iron
 lazy_static = "*"
 regex = "1"
 params = "*"
-reqwest = "*"
+reqwest = {version="0.9", default_features=false, features=["rustls-tls"]}
 serde = "1.0"
 serde_yaml = "*"
 serde_derive = "1.0"
