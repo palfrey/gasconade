@@ -26,6 +26,7 @@ extern crate serde_yaml;
 extern crate error_chain;
 
 use crate::db::PostgresConnection;
+use iron::mime::*;
 use iron::modifiers::RedirectRaw;
 use iron::prelude::*;
 use iron::status;
@@ -37,7 +38,6 @@ use router::Router;
 use std::env;
 use std::fs::File;
 use std::str::FromStr;
-use iron::mime::*;
 
 #[macro_use]
 mod db;

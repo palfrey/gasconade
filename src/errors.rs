@@ -1,4 +1,3 @@
-use iron;
 use iron::modifiers::RedirectRaw;
 
 // Create the Error, ErrorKind, ResultExt, and Result types

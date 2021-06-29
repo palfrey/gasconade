@@ -1,6 +1,4 @@
-use postgres;
 use postgres::transaction::Transaction;
-use schemamama;
 use schemamama::Migrator;
 use schemamama_postgres::{PostgresAdapter, PostgresMigration};
 
