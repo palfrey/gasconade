@@ -33,13 +33,13 @@ impl PostgresMigration for Tweet {
                 &[],
             )
             .unwrap();
-        return Ok(());
+        Ok(())
     }
 
     fn down(&self, transaction: &Transaction) -> Result<(), postgres::error::Error> {
         transaction.execute("DROP TABLE tweet", &[]).unwrap();
         transaction.execute("DROP TABLE twitter_user", &[]).unwrap();
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -49,10 +49,10 @@ fn migrate(connection: &postgres::Connection) -> Migrator<PostgresAdapter> {
 
     let mut migrator = Migrator::new(adapter);
     migrator.register(Box::new(Tweet));
-    return migrator;
+    migrator
 }
 
 pub fn up(connection: &postgres::Connection) -> Result<(), schemamama::Error<postgres::error::Error>> {
     let migrator = migrate(connection);
-    return migrator.up(None);
+    migrator.up(None)
 }

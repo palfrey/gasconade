@@ -23,7 +23,6 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate base64;
-extern crate rustc_serialize;
 extern crate serde_yaml;
 #[macro_use]
 extern crate error_chain;
@@ -98,7 +97,7 @@ lazy_static! {
     };
 }
 
-#[derive(Deserialize, Serialize, Debug, RustcEncodable, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 struct TwitterUser {
     id: i64,
     screen_name: String,
@@ -106,7 +105,7 @@ struct TwitterUser {
     profile_image_url: String,
 }
 
-#[derive(Deserialize, Serialize, Debug, RustcEncodable, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 struct Tweet {
     id: i64,
     user: TwitterUser,
@@ -222,7 +221,7 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
     if !tweets.is_empty() {
         let tweet = tweets.get(0);
         return Ok(Tweet {
-            id: id,
+            id,
             user: get_user_from_db(conn, tweet.get(0)),
             text: tweet.get(1),
             in_reply_to_status_id: tweet.get(2),
@@ -247,14 +246,14 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
         warn!("Error: {:?}", err);
         let first = err.errors.first().unwrap();
         if first.code == 144 {
-            return Err(ErrorKind::NoSuchTweet(id).into());
+            Err(ErrorKind::NoSuchTweet(id).into())
         } else {
-            return Err(ErrorKind::OtherTwitterError(
+            Err(ErrorKind::OtherTwitterError(
                 first.code,
                 first.message.clone(),
                 format!("https://twitter.com/{}/status/{}", name, id),
             )
-            .into());
+            .into())
         }
     } else {
         let t: Tweet = res.json()?;
@@ -349,7 +348,7 @@ pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
     }
     let url_value = find_url.unwrap();
     let re = regex::Regex::new(r"twitter.com/([^/]+)/status/(\d+)").unwrap();
-    if let &Value::String(ref url) = url_value {
+    if let Value::String(ref url) = *url_value {
         let raw_caps = re.captures(url);
         if raw_caps.is_none() {
             return Ok(Response::with(status::BadRequest));
@@ -394,13 +393,13 @@ pub fn index(req: &mut Request) -> IronResult<Response> {
             "error",
             error
                 .map(|v| {
-                    if let &params::Value::String(ref s) = v {
+                    if let params::Value::String(ref s) = *v {
                         s.to_owned()
                     } else {
                         String::default()
                     }
                 })
-                .unwrap_or(String::default()),
+                .unwrap_or_default(),
         )
         .build();
     Ok(Response::with((
@@ -411,7 +410,10 @@ pub fn index(req: &mut Request) -> IronResult<Response> {
 }
 
 fn get_server_port() -> u16 {
-    env::var("PORT").unwrap_or("8000".to_string()).parse().unwrap()
+    env::var("PORT")
+        .unwrap_or_else(|_| "8000".to_string())
+        .parse()
+        .unwrap()
 }
 
 fn main() {

@@ -393,7 +393,6 @@ dependencies = [
  "regex",
  "reqwest",
  "router",
- "rustc-serialize",
  "schemamama",
  "schemamama_postgres",
  "serde",
