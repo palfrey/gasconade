@@ -1,0 +1,30 @@
+on: [push, pull_request]
+
+name: build
+
+jobs:
+  check:
+    name: Rust project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            components: rustfmt, clippy
+
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test         
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+
+      - name: Run cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt -- --check
