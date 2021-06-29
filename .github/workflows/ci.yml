@@ -26,9 +26,11 @@ jobs:
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
-          command: clippy -- -D warnings
+          command: clippy
+          args: -- -D warnings
 
       - name: Run cargo fmt
         uses: actions-rs/cargo@v1
         with:
-          command: fmt -- --check
+          command: fmt
+          args: -- --check
