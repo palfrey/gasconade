@@ -13,8 +13,6 @@ extern crate r2d2;
 extern crate r2d2_postgres;
 extern crate router;
 #[macro_use]
-extern crate mime;
-#[macro_use]
 extern crate lazy_static;
 extern crate params;
 extern crate regex;
@@ -27,7 +25,7 @@ extern crate serde_yaml;
 #[macro_use]
 extern crate error_chain;
 
-use db::PostgresConnection;
+use crate::db::PostgresConnection;
 use iron::modifiers::RedirectRaw;
 use iron::prelude::*;
 use iron::status;
@@ -39,14 +37,15 @@ use router::Router;
 use std::env;
 use std::fs::File;
 use std::str::FromStr;
+use iron::mime::*;
 
 #[macro_use]
 mod db;
 mod errors;
 mod schema;
-use errors::*;
+use crate::errors::*;
 mod common;
-use common::*;
+use crate::common::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TwitterConfig {
