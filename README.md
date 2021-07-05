@@ -6,6 +6,8 @@ _n. extravagant boasting; boastful talk_
 
 In this context, it's a Rust web app for making blog posts for Twitter users who apparently think that 100-item threads are readable.
 
+Live instance is at https://gasconade.tevp.net/
+
 Local running
 -------------
 
