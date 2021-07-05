@@ -1,6 +1,6 @@
 Gasconade
 =========
-[![dependency status](https://deps.rs/repo/github/palfrey/gasconade/status.svg)](https://deps.rs/repo/github/palfrey/gasconade)
+[![build](https://github.com/palfrey/gasconade/actions/workflows/ci.yml/badge.svg)](https://github.com/palfrey/gasconade/actions/workflows/ci.yml)
 
 _n. extravagant boasting; boastful talk_
 
