@@ -72,11 +72,13 @@ twttr.ready(function (twttr) {
                 });
             });
             console.log("Header", main_header);
-            var first_widget = document.getElementById("twitter-widget-0");
-            first_widget.parentNode.insertBefore(main_header, first_widget);
-            Array.prototype.forEach.call(document.getElementsByClassName("twitter-tweet-rendered"), function(element) {
-                element.style.width = "";
-            });
+            if (main_header !== null) {
+                var first_widget = document.getElementById("twitter-widget-0");
+                first_widget.parentNode.insertBefore(main_header, first_widget);
+                Array.prototype.forEach.call(document.getElementsByClassName("twitter-tweet-rendered"), function(element) {
+                    element.style.width = "";
+                });
+            }
         }
     );
 })

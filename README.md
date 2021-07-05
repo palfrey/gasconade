@@ -12,7 +12,7 @@ Local running
 -------------
 
 1. Have a Postgres database, and set environment variable DATABASE_URL to a login for that.
-    * Easiest way is with Docker, using `docker run -P -d postgres` and then `export DATABASE_URL=postgresql://postgres:postgres@localhost:<port>` where you can get `port` from `docker ps`
+    * Easiest way is with Docker, using `docker run -P -d postgres:12.1` and then `export DATABASE_URL=postgresql://postgres:postgres@localhost:<port>` where you can get `port` from `docker ps`
 2. [Install Rust](https://www.rust-lang.org/en-US/install.html)
 3. Copy `config.yaml.example` to `config.yaml` and replace `key`/`secret` with keys from a [Twitter app you've registered](https://apps.twitter.com/)
 4. `cargo run`
