@@ -43,7 +43,7 @@ impl PostgresMigration for Tweet {
 
 fn migrate(connection: &postgres::Connection) -> Migrator<PostgresAdapter> {
     let adapter = PostgresAdapter::new(connection);
-    let _ = adapter.setup_schema().unwrap();
+    adapter.setup_schema().unwrap();
 
     let mut migrator = Migrator::new(adapter);
     migrator.register(Box::new(Tweet));
