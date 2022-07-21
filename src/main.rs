@@ -60,7 +60,6 @@ struct Config {
 
 #[derive(Debug, Deserialize)]
 struct BearerToken {
-    token_type: String,
     access_token: String,
 }
 
@@ -265,7 +264,7 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
     let mut tweets: Vec<Tweet> = Vec::new();
     let mut current_id = id;
     loop {
-        let t = get_tweet(&conn, name, current_id)?;
+        let t = get_tweet(conn, name, current_id)?;
         let next_id: Option<i64> = if t.in_reply_to_user_id.unwrap_or(-1) == t.user.id {
             t.in_reply_to_status_id
         } else {
@@ -339,7 +338,7 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
 }
 
 pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
-    let conn = get_pg_connection!(&req);
+    let conn = get_pg_connection!(req);
     let map = req.get_ref::<Params>().unwrap();
     let find_url = map.find(&["twitter_url"]);
     if find_url.is_none() {
@@ -366,7 +365,7 @@ pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
 }
 
 pub fn tweet(req: &mut Request) -> IronResult<Response> {
-    let conn = get_pg_connection!(&req);
+    let conn = get_pg_connection!(req);
     let router = req.extensions.get::<Router>().unwrap();
     let tweet_id: i64 = i64::from_str(router.find("tweet_id").unwrap()).unwrap();
     let name = router.find("name").unwrap_or("");
