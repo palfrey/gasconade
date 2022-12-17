@@ -26,6 +26,8 @@ extern crate serde_yaml;
 extern crate error_chain;
 
 use crate::db::PostgresConnection;
+use fantoccini::ClientBuilder;
+use fantoccini::Locator;
 use iron::mime::*;
 use iron::modifiers::RedirectRaw;
 use iron::prelude::*;
@@ -38,6 +40,9 @@ use router::Router;
 use std::env;
 use std::fs::File;
 use std::str::FromStr;
+use std::thread;
+use std::time::Duration;
+use tokio::runtime::Runtime;
 
 #[macro_use]
 mod db;
@@ -83,14 +88,14 @@ lazy_static! {
         }
     };
     static ref TOKEN: String = {
-        let client = reqwest::Client::new();
-        let mut res = client.post("https://api.twitter.com/oauth2/token")
+        let client = reqwest::blocking::Client::new();
+        let res = client.post("https://api.twitter.com/oauth2/token")
             .basic_auth(CONFIG.twitter.key.clone(), Some(CONFIG.twitter.secret.clone()))
             .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .body("grant_type=client_credentials")
             .send().unwrap();
+        res.error_for_status_ref().unwrap();
         let content: BearerToken = res.json().unwrap();
-        res.error_for_status().unwrap();
         content.access_token
     };
 }
@@ -111,9 +116,13 @@ struct Tweet {
     in_reply_to_status_id: Option<i64>,
     in_reply_to_user_id: Option<i64>,
 
-    // we fill this in from OEmbed, not the original JSON
+    // Filled in from browser running off embed
     #[serde(default)]
-    html: String,
+    header: String,
+    #[serde(default)]
+    content: String,
+    #[serde(default)]
+    footer: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -132,11 +141,6 @@ struct SearchResults {
     statuses: Vec<Tweet>,
 }
 
-#[derive(Deserialize, Debug)]
-struct OEmbed {
-    html: String,
-}
-
 fn get_user_from_db(conn: &db::PostgresConnection, user_id: i64) -> TwitterUser {
     let users = &conn
         .query(
@@ -153,6 +157,49 @@ fn get_user_from_db(conn: &db::PostgresConnection, user_id: i64) -> TwitterUser 
         name: user.get(0),
         profile_image_url: user.get(1),
         screen_name: user.get(2),
+    }
+}
+
+struct TweetHtml {
+    header: String,
+    content: String,
+    footer: String,
+}
+
+async fn get_tweet_html(id: i64) -> TweetHtml {
+    let mut caps = serde_json::map::Map::new();
+    let opts = serde_json::json!({ "args": ["--headless"] });
+    caps.insert("moz:firefoxOptions".to_string(), opts);
+    let c = ClientBuilder::rustls()
+        .capabilities(caps)
+        .connect("http://localhost:4444")
+        .await
+        .expect("failed to connect to WebDriver");
+    let url = format!(
+        "https://platform.twitter.com/embed/Tweet.html?dnt=true&frame=false&hideCard=false&hideThread=true&id={}&lang=en&theme=light&widgetsVersion=a3525f077c700%3A1667415560940",
+        id
+    );
+    println!("url: {}", url);
+    c.goto(&url).await.unwrap();
+    loop {
+        let element = c.find(Locator::Css("article")).await;
+        if element.is_ok() {
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    let divs = c.find_all(Locator::Css("article > div")).await.unwrap();
+    let header = divs[0].html(false).await.unwrap();
+    let content = divs[1].html(false).await.unwrap();
+    let footer = divs[2].html(false).await.unwrap();
+    println!("\nHeader: {:?}", header);
+    println!("\nContent: {:?}", content);
+    println!("\nFooter: {:?}", footer);
+    c.close().await.unwrap();
+    TweetHtml {
+        header,
+        content,
+        footer,
     }
 }
 
@@ -175,23 +222,13 @@ fn store_tweet(conn: &db::PostgresConnection, t: &Tweet) {
         )
         .unwrap();
     }
-    let client = reqwest::Client::new();
-    let mut content = client
-        .get(&format!(
-            concat!(
-                "https://publish.twitter.com/oembed?url=https://twitter.com/{}/status/{}&",
-                "hide_thread=true&omit_script=true&dnt=true"
-            ),
-            &t.user.screen_name, &t.id
-        ))
-        .send()
-        .unwrap();
-    let oembed: OEmbed = content.json().expect("valid oembed data");
+    let runtime = Runtime::new().unwrap();
+    let tweet_html = runtime.block_on(get_tweet_html(t.id));
     conn.execute(
         concat!(
             "INSERT INTO tweet ",
-            "(id, user_id, text, in_reply_to_status_id, in_reply_to_user_id, html) ",
-            "VALUES ($1,$2,$3,$4,$5,$6)"
+            "(id, user_id, text, in_reply_to_status_id, in_reply_to_user_id, header, content, footer) ",
+            "VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"
         ),
         &[
             &t.id,
@@ -199,7 +236,9 @@ fn store_tweet(conn: &db::PostgresConnection, t: &Tweet) {
             &t.text,
             &t.in_reply_to_status_id,
             &t.in_reply_to_user_id,
-            &oembed.html,
+            &tweet_html.header,
+            &tweet_html.content,
+            &tweet_html.footer,
         ],
     )
     .unwrap();
@@ -210,28 +249,30 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
         .query(
             concat!(
                 "SELECT user_id, text, in_reply_to_status_id, ",
-                "in_reply_to_user_id, html ",
+                "in_reply_to_user_id, header, content, footer ",
                 "FROM tweet WHERE id = $1"
             ),
             &[&id],
         )
         .unwrap();
     if !tweets.is_empty() {
-        let tweet = tweets.get(0);
+        let tweet = tweets.get(0);        
         return Ok(Tweet {
             id,
             user: get_user_from_db(conn, tweet.get(0)),
             text: tweet.get(1),
             in_reply_to_status_id: tweet.get(2),
             in_reply_to_user_id: tweet.get(3),
-            html: tweet.get(4),
+            header: tweet.get(4),
+            content: tweet.get(5),
+            footer: tweet.get(6),
         });
     }
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::RedirectPolicy::none())
+    let client = reqwest::blocking::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap();
-    let mut res = client
+    let res = client
         .get(&format!(
             "https://api.twitter.com/1.1/statuses/show.json?id={}",
             id
@@ -277,7 +318,7 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
         current_id = next_id.unwrap();
     }
     if future_tweets {
-        let client = reqwest::Client::new();
+        let client = reqwest::blocking::Client::new();
         let mut current = {
             let last = tweets.last();
             last.unwrap().clone()
@@ -287,7 +328,7 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
                 .query(
                     concat!(
                         "SELECT id, user_id, text, in_reply_to_status_id,",
-                        "in_reply_to_user_id, html FROM tweet WHERE in_reply_to_status_id = $1"
+                        "in_reply_to_user_id, header, content, footer FROM tweet WHERE in_reply_to_status_id = $1"
                     ),
                     &[&current.id],
                 )
@@ -300,14 +341,16 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
                     text: tweet.get(2),
                     in_reply_to_status_id: tweet.get(3),
                     in_reply_to_user_id: tweet.get(4),
-                    html: tweet.get(5),
+                    header: tweet.get(5),
+                    content: tweet.get(6),
+                    footer: tweet.get(7),
                 };
                 current = t.clone();
                 tweets.push(t);
                 continue;
             }
 
-            let mut res = client
+            let res = client
                 .get(&format!(
                     concat!(
                         "https://api.twitter.com/1.1/search/tweets.json?",

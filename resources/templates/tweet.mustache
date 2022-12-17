@@ -3,7 +3,8 @@
 <h1><a href="/"><abbr title="n. extravagant boasting; boastful talk">Gasconade</abbr></a></h1>
 <br />
 {{#tweets}}
-{{{html}}}
+{{{content}}}
+{{{footer}}}
 {{/tweets}}
 <script>
 window.twttr = (function(d, s, id) {
@@ -43,8 +44,21 @@ twttr.ready(function (twttr) {
                     root = widget.contentDocument;
                     widget.style.height = "";
                 }
+                else if (widget.tagName == "DIV") {
+                    Array.prototype.forEach.call(widget.children, function(element) {
+                        console.log("tagName", element.tagName);
+                        if (element.tagName == "IFRAME") {
+                            root = element.contentDocument;
+                        }
+                    });
+                }                    
                 else {
                     console.log("Unrecognised widget type: " + widget.tagName);
+                    console.log(widget);
+                    return;
+                }
+                if (root == null) {
+                    console.log("no root!");
                     return;
                 }
                 var header = root.getElementsByClassName("Tweet-header")[0];
