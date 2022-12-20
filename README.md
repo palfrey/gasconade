@@ -25,3 +25,6 @@ Heroku running
 2. `heroku create --buildpack https://github.com/emk/heroku-buildpack-rust.git`
 3. Add Heroku Postgres
 4. Set TWITTER_KEY and TWITTER_SECRET config vars as per `key`/`secret` from local running
+
+
+https://github.com/mozilla/geckodriver/releases/download/v0.32.0/geckodriver-v0.32.0-linux64.tar.gz

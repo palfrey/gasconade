@@ -41,12 +41,50 @@ impl PostgresMigration for Tweet {
     }
 }
 
+struct EmbedContent;
+migration!(EmbedContent, 202212172302, "add full content data");
+
+impl PostgresMigration for EmbedContent {
+    fn up(&self, transaction: &Transaction) -> Result<(), postgres::error::Error> {
+        transaction
+            .execute(
+                "ALTER TABLE tweet
+                RENAME COLUMN html TO content;",
+                &[],
+            )
+            .unwrap();
+        transaction
+            .execute(
+                "ALTER TABLE tweet
+                ADD COLUMN header TEXT DEFAULT '',
+                ADD COLUMN footer TEXT DEFAULT '';",
+                &[],
+            )
+            .unwrap();
+        Ok(())
+    }
+
+    fn down(&self, transaction: &Transaction) -> Result<(), postgres::error::Error> {
+        transaction
+            .execute(
+                "ALTER TABLE tweet
+                RENAME COLUMN content TO html,
+                DROP COLUMN header RESTRICT,
+                DROP COLUMN footer RESTRICT;",
+                &[],
+            )
+            .unwrap();
+        Ok(())
+    }
+}
+
 fn migrate(connection: &postgres::Connection) -> Migrator<PostgresAdapter> {
     let adapter = PostgresAdapter::new(connection);
     adapter.setup_schema().unwrap();
 
     let mut migrator = Migrator::new(adapter);
     migrator.register(Box::new(Tweet));
+    migrator.register(Box::new(EmbedContent));
     migrator
 }
 

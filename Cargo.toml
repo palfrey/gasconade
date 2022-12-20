@@ -22,9 +22,12 @@ mustache = "0.9"
 lazy_static = "*"
 regex = "1"
 params = "*"
-reqwest = {version="0.9", default_features=false, features=["rustls-tls"]}
+reqwest = {version="0.11", default_features=false, features=["rustls-tls", "blocking", "json"]}
 serde = "1.0"
 serde_yaml = ">= 0.8.4"
 serde_derive = "1.0"
 base64 = "0.13"
 error-chain = "*"
+fantoccini = {version="0.19.3", default_features=false, features=["rustls-tls"]}
+tokio = {version="1", features=["macros", "rt-multi-thread"]}
+serde_json = "*"
