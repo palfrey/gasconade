@@ -256,7 +256,7 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
         )
         .unwrap();
     if !tweets.is_empty() {
-        let tweet = tweets.get(0);        
+        let tweet = tweets.get(0);
         return Ok(Tweet {
             id,
             user: get_user_from_db(conn, tweet.get(0)),
@@ -273,7 +273,7 @@ fn get_tweet(conn: &db::PostgresConnection, name: &str, id: i64) -> Result<Tweet
         .build()
         .unwrap();
     let res = client
-        .get(&format!(
+        .get(format!(
             "https://api.twitter.com/1.1/statuses/show.json?id={}",
             id
         ))
@@ -351,7 +351,7 @@ fn get_tweets(conn: &PostgresConnection, name: &str, id: i64, future_tweets: boo
             }
 
             let res = client
-                .get(&format!(
+                .get(format!(
                     concat!(
                         "https://api.twitter.com/1.1/search/tweets.json?",
                         "q=to%3A{name}%20from%3A{name}&since_id={id}&include_entities=false&count=100"
@@ -398,10 +398,10 @@ pub fn new_tweet(req: &mut Request) -> IronResult<Response> {
         let id = i64::from_str(caps.get(2).unwrap().as_str()).unwrap();
         let name = caps.get(1).unwrap().as_str();
         let tweets = get_tweets(&conn, name, id, true)?;
-        return Ok(Response::with((
+        Ok(Response::with((
             status::Found,
             RedirectRaw(format!("/tweet/{}/{}", name, tweets.last().unwrap().id)),
-        )));
+        )))
     } else {
         unimplemented!();
     }

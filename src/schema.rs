@@ -53,14 +53,14 @@ impl PostgresMigration for EmbedContent {
                 &[],
             )
             .unwrap();
-            transaction
+        transaction
             .execute(
                 "ALTER TABLE tweet
                 ADD COLUMN header TEXT DEFAULT '',
                 ADD COLUMN footer TEXT DEFAULT '';",
                 &[],
             )
-            .unwrap();            
+            .unwrap();
         Ok(())
     }
 
